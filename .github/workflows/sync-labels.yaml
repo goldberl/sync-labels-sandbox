@@ -1,18 +1,20 @@
-name: Copy Issue Labels to PR
+name: Label Sync
 
 on:
+  issues:
+    types: [labeled, unlabeled]
   pull_request:
-    types: [opened, edited, synchronize]
+    types: [labeled, unlabeled, opened, edited, synchronize]
 
 permissions:
   issues: write
   pull-requests: write
 
 jobs:
-  copy-labels:
+  sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Copy labels from issue
-        uses: michalvankodev/copy-issue-labels@v2.0.0
+      - name: Run label sync
+        uses: goldberl/label-sync-action@main
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
