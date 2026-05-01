@@ -1,0 +1,12 @@
+name: Copy Issue Labels to PR
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  copy-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy labels from issue
+        uses: michalvankodev/copy-issue-labels@v2.0.0
