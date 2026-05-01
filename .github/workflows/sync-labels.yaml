@@ -13,6 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Copy labels from issue
-        uses: michalvankodev/copy-issue-labels@v2.0.0
+        uses: goldberl/sync-labels-labels@main
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
