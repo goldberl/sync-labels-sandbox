@@ -2,9 +2,10 @@ name: Bi-directional Label Sync
 
 on:
   pull_request:
-    types: [labeled, unlabeled, opened]
+    types: [labeled, unlabeled, opened, edited]
   issues:
     types: [labeled, unlabeled]
+  workflow_dispatch:
 
 permissions:
   issues: write
@@ -22,7 +23,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -x # This tells Bash to print every command before running it
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             # 1. Identify the linked issue
             ISSUE_NUM=$(echo "${{ github.event.pull_request.body }}" | grep -oP '(?i)(closes|closed|fixes|fixed|resolves|resolved)\s+#\K\d+' | head -1)
