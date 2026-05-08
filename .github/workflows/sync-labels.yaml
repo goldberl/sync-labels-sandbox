@@ -23,29 +23,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            # 1. Extract Issue Number from PR body
+            # 1. Identify the linked issue
             ISSUE_NUM=$(echo "${{ github.event.pull_request.body }}" | grep -oP '(?i)(closes|closed|fixes|fixed|resolves|resolved)\s+#\K\d+' | head -1)
             
             if [ -n "$ISSUE_NUM" ]; then
-              # 2. Get current PR labels as a JSON array (handles spaces perfectly)
+              # 2. Get current labels from PR as a proper JSON array
               LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '[.labels[].name]')
               
               echo "Syncing PR labels to Issue #$ISSUE_NUM: $LABELS"
               
-              # 3. Use the API to 'REPLACE' labels on the issue
-              gh api -X PUT "/repos/${{ github.repository }}/issues/$ISSUE_NUM/labels" -f labels="$LABELS"
+              # 3. Use raw API to REPLACE labels
+              # The '-p' flag tells gh to pass the body as raw JSON
+              echo "$LABELS" | gh api -X PUT "/repos/${{ github.repository }}/issues/$ISSUE_NUM/labels" --input -
             fi
 
           elif [ "${{ github.event_name }}" == "issues" ]; then
             # 1. Find linked PRs
             PR_LIST=$(gh pr list --search "fixes #${{ github.event.issue.number }}" --json number -q '.[].number')
             
-            # 2. Get current Issue labels as a JSON array
+            # 2. Get current labels from Issue as a proper JSON array
             LABELS=$(gh issue view ${{ github.event.issue.number }} --json labels -q '[.labels[].name]')
             
-            # 3. Update each linked PR
             for PR in $PR_LIST; do
               echo "Syncing Issue labels to PR #$PR: $LABELS"
-              gh api -X PUT "/repos/${{ github.repository }}/issues/$PR/labels" -f labels="$LABELS"
+              
+              # 3. Use raw API to REPLACE labels on the PR
+              echo "$LABELS" | gh api -X PUT "/repos/${{ github.repository }}/issues/$PR/labels" --input -
             done
           fi
