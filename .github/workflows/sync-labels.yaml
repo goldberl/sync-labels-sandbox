@@ -9,31 +9,45 @@ on:
 permissions:
   issues: write
   pull-requests: write
+  contents: read
 
 jobs:
   sync-labels:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Sync Logic
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # SCENARIO 1: Label added to PR -> Update the Issue
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            # Extract issue number from PR body (looking for "Closes #123")
-            ISSUE_NUM=$(echo "${{ github.event.pull_request.body }}" | grep -oP '(?i)(closes|fixes|resolves)\s+#\K\d+' | head -1)
+            # 1. Extract Issue Number
+            ISSUE_NUM=$(echo "${{ github.event.pull_request.body }}" | grep -oP '(?i)(closes|closed|fixes|fixed|resolves|resolved)\s+#\K\d+' | head -1)
+            
             if [ -n "$ISSUE_NUM" ]; then
+              echo "Found linked Issue: #$ISSUE_NUM"
+              # 2. Get labels from PR
               LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --template '{{range .labels}}{{.name}},{{end}}' | sed 's/,$//')
-              gh issue edit $ISSUE_NUM --labels "$LABELS"
+              
+              if [ -n "$LABELS" ]; then
+                # 3. Sync to Issue (Using --add-label to be safe with CLI versions)
+                # To overwrite all labels, we use the space-separated string format
+                gh issue edit $ISSUE_NUM --add-label "$LABELS"
+              fi
             fi
 
-          # SCENARIO 2: Label added to Issue -> Update the PR
           elif [ "${{ github.event_name }}" == "issues" ]; then
-            # Find PRs that link to this issue
+            # 1. Find linked PRs
             PR_LIST=$(gh pr list --search "fixes #${{ github.event.issue.number }}" --json number --template '{{range .}}{{.number}} {{end}}')
+            
+            # 2. Get labels from Issue
             LABELS=$(gh issue view ${{ github.event.issue.number }} --json labels --template '{{range .labels}}{{.name}},{{end}}' | sed 's/,$//')
-
+            
+            # 3. Update each PR
             for PR in $PR_LIST; do
-              gh pr edit $PR --labels "$LABELS"
+              echo "Syncing to PR: #$PR"
+              gh pr edit $PR --add-label "$LABELS"
             done
           fi
