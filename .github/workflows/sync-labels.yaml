@@ -2,10 +2,11 @@ name: Bi-directional Label Sync
 
 on:
   pull_request:
+    # 'edited' allows the sync to trigger if you add the "fixes #123" link later
     types: [labeled, unlabeled, opened, edited]
   issues:
     types: [labeled, unlabeled]
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 permissions:
   issues: write
@@ -24,31 +25,38 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            # 1. Identify the linked issue
+            # 1. Identify the linked issue from the PR body
             ISSUE_NUM=$(echo "${{ github.event.pull_request.body }}" | grep -oP '(?i)(closes|closed|fixes|fixed|resolves|resolved)\s+#\K\d+' | head -1)
             
             if [ -n "$ISSUE_NUM" ]; then
-              # 2. Get current labels from PR as a proper JSON array
-              LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '[.labels[].name]')
+              # 2. Get current labels from this PR
+              PR_LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '[.labels[].name]')
               
-              echo "Syncing PR labels to Issue #$ISSUE_NUM: $LABELS"
-              
-              # 3. Use raw API to REPLACE labels
-              # The '-p' flag tells gh to pass the body as raw JSON
-              echo "$LABELS" | gh api -X PUT "/repos/${{ github.repository }}/issues/$ISSUE_NUM/labels" --input -
+              # 3. SAFETY CHECK:
+              # If PR has labels, sync them TO the Issue (Standard Mirroring).
+              # If PR is EMPTY (typical for new PRs), pull labels FROM the Issue TO the PR.
+              if [ "$PR_LABELS" != "[]" ]; then
+                echo "PR has labels. Syncing PR -> Issue #$ISSUE_NUM"
+                echo "$PR_LABELS" | gh api -X PUT "/repos/${{ github.repository }}/issues/$ISSUE_NUM/labels" --input -
+              else
+                echo "PR is empty. Pulling labels FROM Issue #$ISSUE_NUM -> PR"
+                ISSUE_LABELS=$(gh issue view $ISSUE_NUM --json labels -q '[.labels[].name]')
+                echo "$ISSUE_LABELS" | gh api -X PUT "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels" --input -
+              fi
+            else
+              echo "No linked issue found in the PR description. Skipping sync."
             fi
 
           elif [ "${{ github.event_name }}" == "issues" ]; then
-            # 1. Find linked PRs
+            # 1. Find all PRs linked to this issue
             PR_LIST=$(gh pr list --search "fixes #${{ github.event.issue.number }}" --json number -q '.[].number')
             
-            # 2. Get current labels from Issue as a proper JSON array
+            # 2. Get current labels from the Issue
             LABELS=$(gh issue view ${{ github.event.issue.number }} --json labels -q '[.labels[].name]')
             
+            # 3. Sync Issue labels TO all linked PRs
             for PR in $PR_LIST; do
-              echo "Syncing Issue labels to PR #$PR: $LABELS"
-              
-              # 3. Use raw API to REPLACE labels on the PR
+              echo "Syncing Issue -> PR #$PR"
               echo "$LABELS" | gh api -X PUT "/repos/${{ github.repository }}/issues/$PR/labels" --input -
             done
           fi
