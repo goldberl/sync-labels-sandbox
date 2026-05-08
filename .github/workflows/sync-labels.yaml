@@ -1,18 +1,39 @@
-name: Copy Issue Labels to PR
+name: Bi-directional Label Sync
 
 on:
   pull_request:
-    types: [opened, edited, synchronize]
+    types: [labeled, unlabeled, opened]
+  issues:
+    types: [labeled, unlabeled]
 
 permissions:
   issues: write
   pull-requests: write
 
 jobs:
-  copy-labels:
+  sync-labels:
     runs-on: ubuntu-latest
     steps:
-      - name: Copy labels from issue
-        uses: goldberl/sync-labels-action@main
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Sync Logic
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # SCENARIO 1: Label added to PR -> Update the Issue
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # Extract issue number from PR body (looking for "Closes #123")
+            ISSUE_NUM=$(echo "${{ github.event.pull_request.body }}" | grep -oP '(?i)(closes|fixes|resolves)\s+#\K\d+' | head -1)
+            if [ -n "$ISSUE_NUM" ]; then
+              LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --template '{{range .labels}}{{.name}},{{end}}' | sed 's/,$//')
+              gh issue edit $ISSUE_NUM --labels "$LABELS"
+            fi
+
+          # SCENARIO 2: Label added to Issue -> Update the PR
+          elif [ "${{ github.event_name }}" == "issues" ]; then
+            # Find PRs that link to this issue
+            PR_LIST=$(gh pr list --search "fixes #${{ github.event.issue.number }}" --json number --template '{{range .}}{{.number}} {{end}}')
+            LABELS=$(gh issue view ${{ github.event.issue.number }} --json labels --template '{{range .labels}}{{.name}},{{end}}' | sed 's/,$//')
+
+            for PR in $PR_LIST; do
+              gh pr edit $PR --labels "$LABELS"
+            done
+          fi
