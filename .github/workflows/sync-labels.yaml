@@ -27,14 +27,15 @@ jobs:
           # Sync PR labels to issues (put labels from PR to the corresponding issue)
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             
-            # Identify the linked issue from the PR body
+            # Identify the linked issue from the PR body by searching for keywords to find the issue number
             ISSUE_NUM=$(echo "${{ github.event.pull_request.body }}" | grep -oP '(?i)(closes|closed|fixes|fixed|resolves|resolved)\s+#\K\d+' | head -1)
             
             # Get current labels from this PR
             if [ -n "$ISSUE_NUM" ]; then
               PR_LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '[.labels[].name]')
               
-              # If PR has labels, sync them to the
+              # If PR has labels, sync them to the corresponding issue
+              # This will overwrite all existing labels on the issue with the PR's labels
               if [ "$PR_LABELS" != "[]" ]; then
                 echo "PR has labels. Syncing PR -> Issue #$ISSUE_NUM"
                 echo "$PR_LABELS" | gh api -X PUT "/repos/${{ github.repository }}/issues/$ISSUE_NUM/labels" --input -
